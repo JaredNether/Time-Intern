@@ -16,6 +16,9 @@ function App() {
     const [isRegistering, setIsRegistering] = useState(false);
     const [lastScannedCode, setLastScannedCode] = useState(null);
 
+    // Add isAdmin check
+    const isAdmin = user?.email === process.env.REACT_APP_ADMIN_EMAIL;
+
     const handleScan = async (qrData) => {
         try {
             let parsedQrData;
@@ -101,17 +104,33 @@ function App() {
                 {error && <div className="error-message">{error}</div>}
 
                 <Routes>
+                    {isAdmin ? (
+                        <>
+                            <Route 
+                                path="/generate" 
+                                element={<QRGeneratorPage userId={user.uid} />} 
+                            />
+                            <Route 
+                                path="/" 
+                                element={<Navigate to="/generate" replace />} 
+                            />
+                        </>
+                    ) : (
+                        <>
+                            <Route 
+                                path="/scan" 
+                                element={<QRScannerPage onScan={handleScan} />} 
+                            />
+                            <Route 
+                                path="/" 
+                                element={<Navigate to="/scan" replace />} 
+                            />
+                        </>
+                    )}
+                    {/* Catch unauthorized access attempts */}
                     <Route 
-                        path="/generate" 
-                        element={<QRGeneratorPage userId={user.uid} />} 
-                    />
-                    <Route 
-                        path="/scan" 
-                        element={<QRScannerPage onScan={handleScan} />} 
-                    />
-                    <Route 
-                        path="/" 
-                        element={<Navigate to="/generate" replace />} 
+                        path="*" 
+                        element={<Navigate to="/" replace />} 
                     />
                 </Routes>
             </div>
