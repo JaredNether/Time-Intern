@@ -1,8 +1,13 @@
 {
   "name": "timeinternv2",
   "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "Time-Intern-v2/frontend"
+  ],
   "scripts": {
     "start": "cd Time-Intern-v2/frontend && npm start",
+    "build": "cd Time-Intern-v2/frontend && npm run build",
     "install-deps": "cd Time-Intern-v2/frontend && npm install --legacy-peer-deps"
   },
   "dependencies": {

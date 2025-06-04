@@ -7,7 +7,7 @@ import Register from './components/Register';
 import QRGeneratorPage from './pages/QRGeneratorPage';
 import QRScannerPage from './pages/QRScannerPage';
 
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxpdYSG17BE3rIfBFnaGN4xRXJwj0U2-UsGE3-YyqtHEvIAflphWGQzW4POLnDWXu5FEQ/exec';
+const SCRIPT_URL = process.env.REACT_APP_SCRIPT_URL;
 
 function App() {
     const [user, loading] = useAuthState(auth);

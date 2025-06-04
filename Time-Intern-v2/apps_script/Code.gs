@@ -1,15 +1,12 @@
-// Hourly rate constant - change this value as needed
-const HOURLY_RATE = 25; // PHP per hour
-
-function doGet(e) {
-  return handleResponse(e || {});
-}
-
+// Add this at the very beginning of your script
 function doPost(e) {
-  return handleResponse(e || {});
+  return handleResponse(e || {}, true);
 }
 
-function handleResponse(e) {
+function handleResponse(e, addCors) {
+  const output = ContentService.createTextOutput();
+  let result;
+
   try {
     Logger.log('Received request:', e);
 
@@ -26,7 +23,6 @@ function handleResponse(e) {
       throw new Error('No action specified');
     }
 
-    let result;
     switch (data.action) {
       case 'register':
         result = handleRegistration(data);
@@ -38,15 +34,28 @@ function handleResponse(e) {
         result = { status: 'error', message: 'Invalid action' };
     }
 
-    return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
-
   } catch (error) {
-    return ContentService.createTextOutput(JSON.stringify({
+    result = {
       status: 'error',
       message: error.message,
       debug: error.stack
-    })).setMimeType(ContentService.MimeType.JSON);
+    };
   }
+
+  if (addCors) {
+    output.setMimeType(ContentService.MimeType.JSON);
+    output.setContent(JSON.stringify(result));
+    return output.setHeader('Access-Control-Allow-Origin', '*');
+  }
+  
+  return output;
+}
+
+// Hourly rate constant - change this value as needed
+const HOURLY_RATE = 25; // PHP per hour
+
+function doGet(e) {
+  return handleResponse(e || {});
 }
 
 function handleRegistration(data) {
