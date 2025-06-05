@@ -59,20 +59,27 @@ function handleRegistration(data) {
   const existingUser = findUserByUid(sheet, data.uid);
   if (existingUser) return createResponse('error', 'User already registered');
 
-  // Add new user with required hours and calculate hours left
+  // Add new user with required hours - HOURS_LEFT and SALARY start at 0
   const hoursRequired = parseFloat(data.hours_required) || 0;
+  
+  Logger.log('Registration data received:', JSON.stringify(data));
+  Logger.log('Hours required parsed:', hoursRequired);
+  
   sheet.appendRow([
     data.uid, 
     data.email, 
     data.full_name,
-    hoursRequired,  // HOURS_REQUIRED
-    hoursRequired   // HOURS_LEFT (initially same as required)
+    hoursRequired,  // HOURS_REQUIRED (fixed value from user input)
+    hoursRequired,  // HOURS_LEFT (initially same as required)
+    0               // SALARY (starts at 0, calculated monthly)
   ]);
   
   const newRow = sheet.getLastRow();
-  sheet.getRange(newRow, 4, 1, 2).setNumberFormat('0.00'); // Format both hours columns
+  sheet.getRange(newRow, 4, 1, 3).setNumberFormat('0.00'); // Format hours and salary columns
+  
+  Logger.log('User registered with', hoursRequired, 'required hours');
 
-  return createResponse('success', 'User registered successfully');
+  return createResponse('success', `User registered successfully with ${hoursRequired} required hours`);
 }
 
 function handleAttendance(data) {
@@ -80,15 +87,15 @@ function handleAttendance(data) {
   const now = new Date();
   const todayStr = formatDate(now);
   const currentTimeStr = formatTime(now);
-  const sheetName = 'Daily_Attendance';
+  const sheetName = 'Daily_Logs';
   let sheet = ss.getSheetByName(sheetName);
 
   Logger.log('Processing attendance for UID: ' + data.uid);
   Logger.log('Current date: ' + todayStr + ', time: ' + currentTimeStr);
 
   if (!sheet) {
-    Logger.log('Creating Daily Attendance sheet');
-    sheet = createDailyAttendanceSheet(ss, sheetName);
+    Logger.log('Creating Daily Logs sheet');
+    sheet = createDailyLogsSheet(ss, sheetName);
   }
 
   const usersSheet = ss.getSheetByName('Users');
@@ -176,8 +183,8 @@ function handleAttendance(data) {
     // Force spreadsheet to update
     SpreadsheetApp.flush();
     
-    // Update user's hours left
-    updateUserHoursLeft(data.uid, calculatedHours);
+    // Update user's hours left and salary
+    updateUserStats(data.uid, calculatedHours);
     
     // Create success message
     const hoursFormatted = formatHoursMinutes(calculatedHours);
@@ -186,18 +193,27 @@ function handleAttendance(data) {
   }
 }
 
-function updateUserHoursLeft(uid, hoursWorked) {
+function updateUserStats(uid, hoursWorked) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const usersSheet = ss.getSheetByName('Users');
   const userIndex = findUserByUidIndex(usersSheet, uid);
   
   if (userIndex <= 0) return;
   
+  // Update HOURS_LEFT
   const currentHoursLeft = usersSheet.getRange(userIndex, 5).getValue();
   const newHoursLeft = Math.max(0, currentHoursLeft - hoursWorked);
-  
   usersSheet.getRange(userIndex, 5).setValue(newHoursLeft);
   usersSheet.getRange(userIndex, 5).setNumberFormat('0.00');
+  
+  // Update SALARY (accumulate for current month)
+  const currentSalary = usersSheet.getRange(userIndex, 6).getValue();
+  const additionalSalary = hoursWorked * HOURLY_RATE;
+  const newSalary = currentSalary + additionalSalary;
+  usersSheet.getRange(userIndex, 6).setValue(newSalary);
+  usersSheet.getRange(userIndex, 6).setNumberFormat('0.00');
+  
+  Logger.log(`Updated user ${uid}: Hours left: ${newHoursLeft}, Salary: ${newSalary}`);
 }
 
 // Check if a user already has completed their attendance for a specific date
@@ -277,24 +293,30 @@ function formatHoursMinutes(totalHours) {
 function setupSheets() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
 
-  // Setup Users sheet
+  // Setup Users sheet with new format
   let usersSheet = ss.getSheetByName('Users');
   if (!usersSheet) {
     usersSheet = ss.insertSheet('Users');
-    usersSheet.appendRow(['UID', 'EMAIL', 'FULL_NAME', 'HOURS_REQUIRED', 'HOURS_LEFT']);
-    usersSheet.getRange(1, 1, 1, 5).setFontWeight('bold');
-    usersSheet.getRange('D:E').setNumberFormat('0.00');
+  }
+  
+  // Check if headers need to be set/corrected
+  const lastColumn = usersSheet.getLastColumn();
+  if (lastColumn === 0 || usersSheet.getRange(1, 1).getValue() !== 'UID') {
+    usersSheet.clear();
+    usersSheet.appendRow(['UID', 'EMAIL', 'FULL_NAME', 'HOURS_REQUIRED', 'HOURS_LEFT', 'SALARY']);
+    usersSheet.getRange(1, 1, 1, 6).setFontWeight('bold');
+    usersSheet.getRange('D:F').setNumberFormat('0.00');
   }
 
-  // Setup Daily Attendance sheet (single sheet for all days)
-  let attendanceSheet = ss.getSheetByName('Daily_Attendance');
-  if (!attendanceSheet) {
-    attendanceSheet = ss.insertSheet('Daily_Attendance');
-    attendanceSheet.appendRow(['DATE', 'UID', 'FULL_NAME', 'TIME_IN', 'TIME_OUT', 'HOURS']);
-    attendanceSheet.getRange(1, 1, 1, 6).setBackground('#f3f3f3').setFontWeight('bold');
-    attendanceSheet.getRange('A:A').setNumberFormat('yyyy-mm-dd');
-    attendanceSheet.getRange('D:E').setNumberFormat('HH:mm');
-    attendanceSheet.getRange('F:F').setNumberFormat('0.00');
+  // Setup Daily Logs sheet (renamed from Daily_Attendance)
+  let logsSheet = ss.getSheetByName('Daily_Logs');
+  if (!logsSheet) {
+    logsSheet = ss.insertSheet('Daily_Logs');
+    logsSheet.appendRow(['DATE', 'UID', 'FULL_NAME', 'TIME_IN', 'TIME_OUT', 'HOURS']);
+    logsSheet.getRange(1, 1, 1, 6).setBackground('#f3f3f3').setFontWeight('bold');
+    logsSheet.getRange('A:A').setNumberFormat('yyyy-mm-dd');
+    logsSheet.getRange('D:E').setNumberFormat('HH:mm');
+    logsSheet.getRange('F:F').setNumberFormat('0.00');
   }
 
   // Setup Monthly Summary sheet
@@ -332,22 +354,23 @@ function createMonthlySummaryTrigger() {
 
 function generateMonthlySummary() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const attendanceSheet = ss.getSheetByName('Daily_Attendance');
+  const logsSheet = ss.getSheetByName('Daily_Logs');
   const summarySheet = ss.getSheetByName('Monthly_Summary');
+  const usersSheet = ss.getSheetByName('Users');
 
-  if (!attendanceSheet || !summarySheet) return;
+  if (!logsSheet || !summarySheet || !usersSheet) return;
 
   const lastMonth = new Date();
   lastMonth.setMonth(lastMonth.getMonth() - 1);
   const monthYear = Utilities.formatDate(lastMonth, Session.getScriptTimeZone(), 'yyyy-MM');
 
-  // Get all attendance records
-  const attendanceData = attendanceSheet.getDataRange().getValues();
+  // Get all attendance records for last month
+  const logsData = logsSheet.getDataRange().getValues();
   const monthlyData = new Map();
 
   // Skip header row
-  for (let i = 1; i < attendanceData.length; i++) {
-    const row = attendanceData[i];
+  for (let i = 1; i < logsData.length; i++) {
+    const row = logsData[i];
     const date = row[0];
     const uid = row[1];
     const name = row[2];
@@ -363,7 +386,7 @@ function generateMonthlySummary() {
     }
   }
 
-  // Add summary rows
+  // Add summary rows to Monthly_Summary sheet
   for (const [key, data] of monthlyData) {
     const [uid, name] = key.split('|');
     summarySheet.appendRow([
@@ -374,6 +397,14 @@ function generateMonthlySummary() {
       Math.round(data.salary * 100) / 100
     ]);
   }
+
+  // Reset salary column in Users sheet for new month
+  const usersData = usersSheet.getDataRange().getValues();
+  for (let i = 1; i < usersData.length; i++) {
+    usersSheet.getRange(i + 1, 6).setValue(0); // Reset SALARY column
+  }
+
+  Logger.log(`Monthly summary generated for ${monthYear} and user salaries reset`);
 }
 
 function onOpen() {
@@ -383,8 +414,51 @@ function onOpen() {
     .addItem('Change Hourly Rate', 'changeHourlyRate')
     .addSeparator()
     .addItem('Setup Sheets', 'setupSheets')
-    .addItem('Recalculate Hours Left', 'recalculateAllHoursLeft')
+    .addItem('Fix Users Sheet Headers', 'fixUsersSheetHeaders')
+    .addItem('Recalculate User Stats', 'recalculateAllUserStats')
+    .addItem('Reset Monthly Salaries', 'resetMonthlySalaries')
     .addToUi();
+}
+
+// Function to fix the Users sheet headers if they got corrupted
+function fixUsersSheetHeaders() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const usersSheet = ss.getSheetByName('Users');
+  
+  if (!usersSheet) {
+    SpreadsheetApp.getUi().alert('Users sheet not found');
+    return;
+  }
+  
+  // Get current data (excluding headers)
+  const data = usersSheet.getDataRange().getValues();
+  const userData = data.slice(1); // Remove header row
+  
+  // Clear the sheet
+  usersSheet.clear();
+  
+  // Set correct headers
+  usersSheet.appendRow(['UID', 'EMAIL', 'FULL_NAME', 'HOURS_REQUIRED', 'HOURS_LEFT', 'SALARY']);
+  usersSheet.getRange(1, 1, 1, 6).setFontWeight('bold');
+  
+  // Add back the user data
+  if (userData.length > 0) {
+    for (let i = 0; i < userData.length; i++) {
+      const row = userData[i];
+      // Ensure we have the right number of columns
+      if (row.length >= 6) {
+        usersSheet.appendRow([row[0], row[1], row[2], row[3], row[4], row[5]]);
+      } else if (row.length >= 5) {
+        // Add missing salary column
+        usersSheet.appendRow([row[0], row[1], row[2], row[3], row[4], 0]);
+      }
+    }
+  }
+  
+  // Format the numeric columns
+  usersSheet.getRange('D:F').setNumberFormat('0.00');
+  
+  SpreadsheetApp.getUi().alert('Users sheet headers fixed to: UID | EMAIL | FULL_NAME | HOURS_REQUIRED | HOURS_LEFT | SALARY');
 }
 
 // Function to change the hourly rate
@@ -406,43 +480,78 @@ function changeHourlyRate() {
   }
 }
 
-// Function to recalculate hours left for all users
-function recalculateAllHoursLeft() {
+// Function to recalculate hours left and salary for all users
+function recalculateAllUserStats() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const usersSheet = ss.getSheetByName('Users');
-  const attendanceSheet = ss.getSheetByName('Daily_Attendance');
+  const logsSheet = ss.getSheetByName('Daily_Logs');
   
-  if (!usersSheet || !attendanceSheet) {
+  if (!usersSheet || !logsSheet) {
     SpreadsheetApp.getUi().alert('Required sheets not found');
     return;
   }
   
   const userData = usersSheet.getDataRange().getValues();
-  const attendanceData = attendanceSheet.getDataRange().getValues();
+  const logsData = logsSheet.getDataRange().getValues();
+  const currentMonth = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM');
   
   // Skip header row for users
   for (let i = 1; i < userData.length; i++) {
     const uid = userData[i][0];
     const hoursRequired = userData[i][3];
     
-    // Calculate total hours worked for this user
+    // Calculate total hours worked for this user (all time)
     let totalHoursWorked = 0;
-    for (let j = 1; j < attendanceData.length; j++) {
-      if (attendanceData[j][1] === uid) {
-        const hours = parseFloat(attendanceData[j][5]) || 0;
+    let monthlyHoursWorked = 0;
+    
+    for (let j = 1; j < logsData.length; j++) {
+      if (logsData[j][1] === uid) {
+        const hours = parseFloat(logsData[j][5]) || 0;
+        const logDate = logsData[j][0];
         totalHoursWorked += hours;
+        
+        // Check if this log is from current month
+        if (logDate && Utilities.formatDate(logDate, Session.getScriptTimeZone(), 'yyyy-MM') === currentMonth) {
+          monthlyHoursWorked += hours;
+        }
       }
     }
     
-    // Update hours left
+    // Update hours left and salary
     const hoursLeft = Math.max(0, hoursRequired - totalHoursWorked);
+    const monthlySalary = monthlyHoursWorked * HOURLY_RATE;
+    
     usersSheet.getRange(i + 1, 5).setValue(hoursLeft);
+    usersSheet.getRange(i + 1, 6).setValue(monthlySalary);
   }
   
-  SpreadsheetApp.getUi().alert('Hours left recalculated for all users');
+  // Format the columns
+  usersSheet.getRange('D:F').setNumberFormat('0.00');
+  
+  SpreadsheetApp.getUi().alert('User statistics recalculated for all users');
 }
 
-function createDailyAttendanceSheet(spreadsheet, sheetName) {
+// Function to reset monthly salaries (useful for testing or manual reset)
+function resetMonthlySalaries() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const usersSheet = ss.getSheetByName('Users');
+  
+  if (!usersSheet) {
+    SpreadsheetApp.getUi().alert('Users sheet not found');
+    return;
+  }
+  
+  const userData = usersSheet.getDataRange().getValues();
+  
+  // Skip header row and reset salary column
+  for (let i = 1; i < userData.length; i++) {
+    usersSheet.getRange(i + 1, 6).setValue(0);
+  }
+  
+  SpreadsheetApp.getUi().alert('Monthly salaries reset to 0 for all users');
+}
+
+function createDailyLogsSheet(spreadsheet, sheetName) {
   const sheet = spreadsheet.insertSheet(sheetName);
   sheet.appendRow(['DATE', 'UID', 'FULL_NAME', 'TIME_IN', 'TIME_OUT', 'HOURS']);
   sheet.getRange(1, 1, 1, 6).setBackground('#f3f3f3').setFontWeight('bold');

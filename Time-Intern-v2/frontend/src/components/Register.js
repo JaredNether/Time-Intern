@@ -2,8 +2,6 @@ import React, { useState } from 'react';
 import { auth } from '../firebase/config';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 
-const SCRIPT_URL = process.env.REACT_APP_SCRIPT_URL;
-
 const Register = ({ switchToLogin }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -15,7 +13,7 @@ const Register = ({ switchToLogin }) => {
         e.preventDefault();
         try {
             const result = await createUserWithEmailAndPassword(auth, email, password);
-            const response = await fetch(`${SCRIPT_URL}`, {
+            const response = await fetch(process.env.REACT_APP_SCRIPT_URL, {
                 method: 'POST',
                 mode: 'no-cors',
                 headers: {
@@ -29,12 +27,6 @@ const Register = ({ switchToLogin }) => {
                     hours_required: parseFloat(hoursRequired)
                 })
             });
-
-            console.log('Registration response:', response);
-            
-            // Force setup of sheets after registration
-            await fetch(`${SCRIPT_URL}?action=setup`, { mode: 'no-cors' });
-
         } catch (err) {
             setError(err.message);
         }

@@ -58,14 +58,17 @@ function App() {
                 },
                 body: JSON.stringify({ 
                     action: 'attendance',
-                    qr_data: parsedQrData.code,
-                    user_email: user.email,
                     uid: user.uid,
+                    email: user.email,
+                    full_name: user.displayName || user.email,
+                    qr_data: parsedQrData.code,
                     timestamp: new Date().toISOString()
                 }),
             });
 
-            setMessage('Attendance recorded');
+            // Wait for response before showing success message
+            const result = await response.text();
+            setMessage('Attendance recorded successfully');
             setError(null);
         } catch (error) {
             console.error('Detailed error:', error);
